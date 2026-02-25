@@ -52,6 +52,17 @@ canvas{width:100%!important;height:300px!important}
 .tl-item::before{content:'';position:absolute;left:-20px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
 .tl-date{font-size:.75rem;color:var(--muted);font-family:monospace}
 .tl-text{font-size:.9rem;margin-top:4px;line-height:1.5}
+.news-item{padding:16px;border-bottom:1px solid var(--border);transition:background .2s}
+.news-item:hover{background:rgba(201,168,76,.05)}
+.news-item:last-child{border-bottom:none}
+.news-title{font-size:.95rem;line-height:1.4;margin-bottom:6px}
+.news-title a{color:var(--text);text-decoration:none;transition:color .2s}
+.news-title a:hover{color:var(--accent)}
+.news-meta{display:flex;gap:12px;font-size:.75rem;color:var(--muted);font-family:monospace}
+.news-source{color:var(--accent2)}
+.feed-error{text-align:center;padding:24px;color:var(--red);font-style:italic}
+.refresh-btn{background:var(--card);border:1px solid var(--border);color:var(--accent);padding:6px 14px;border-radius:4px;cursor:pointer;font-family:Georgia,serif;font-size:.8rem;margin-left:12px;transition:background .2s}
+.refresh-btn:hover{background:rgba(201,168,76,.1)}
 .footer{text-align:center;padding:40px 0;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);margin-top:40px}
 </style>
 </head>
@@ -207,9 +218,46 @@ canvas{width:100%!important;height:300px!important}
 </div>
 </div>
 
+<div class="section">
+<div class="section-title">Live Industry News Feed <span id="feed-status" style="font-size:.7rem;color:var(--muted);font-weight:400;margin-left:12px">Loading…</span></div>
+<div id="news-feed" class="chart-container" style="max-height:600px;overflow-y:auto">
+<div id="feed-loading" style="text-align:center;padding:40px;color:var(--muted)">
+<div style="font-size:1.2rem;margin-bottom:8px">⏳</div>
+Fetching latest newspaper industry news…
+</div>
+</div>
+</div>
+
+<div class="section">
+<div class="section-title">Live Market Data <span id="market-status" style="font-size:.7rem;color:var(--muted);font-weight:400;margin-left:12px"></span></div>
+<div class="kpi-row" id="live-kpis">
+<div class="kpi">
+<div class="kpi-label">Gannett (GCI) Stock</div>
+<div class="kpi-value" id="gci-price">—</div>
+<div class="kpi-delta" id="gci-delta"></div>
+</div>
+<div class="kpi">
+<div class="kpi-label">Lee Enterprises (LEE)</div>
+<div class="kpi-value" id="lee-price">—</div>
+<div class="kpi-delta" id="lee-delta"></div>
+</div>
+<div class="kpi">
+<div class="kpi-label">NYT Company (NYT)</div>
+<div class="kpi-value" id="nyt-price">—</div>
+<div class="kpi-delta" id="nyt-delta"></div>
+</div>
+<div class="kpi">
+<div class="kpi-label">News Corp (NWSA)</div>
+<div class="kpi-value" id="nwsa-price">—</div>
+<div class="kpi-delta" id="nwsa-delta"></div>
+</div>
+</div>
+</div>
+
 <footer class="footer">
 <p>The Contrarian Index — A Project PS Product</p>
 <p style="margin-top:8px;font-size:.7rem">Data synthesized from Pew Research, Northwestern Medill, Alliance for Audited Media, SEC filings & industry reports</p>
+<p style="margin-top:4px;font-size:.7rem" id="last-refresh">Live data auto-refreshes every 10 minutes</p>
 </footer>
 </div>
 
@@ -261,6 +309,110 @@ datasets:[{label:'Counties Without a Paper',data:[52,78,114,148,176,204],borderC
 },
 options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
 });
+
+// ===== LIVE DATA INTEGRATION =====
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+const RSS_FEEDS = [
+  {name:'Google News: Newspaper Industry', url:'https://news.google.com/rss/search?q=newspaper+industry+acquisition+circulation&hl=en-US&gl=US&ceid=US:en'},
+  {name:'Google News: Digital Subscriptions', url:'https://news.google.com/rss/search?q=digital+newspaper+subscriptions+media&hl=en-US&gl=US&ceid=US:en'},
+  {name:'Google News: News Media Deals', url:'https://news.google.com/rss/search?q=newspaper+acquisition+merger+media+deal&hl=en-US&gl=US&ceid=US:en'}
+];
+
+function parseRSS(xml){
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(xml,'text/xml');
+  const items=doc.querySelectorAll('item');
+  const results=[];
+  items.forEach(item=>{
+    const title=item.querySelector('title')?.textContent||'';
+    const link=item.querySelector('link')?.textContent||'';
+    const pubDate=item.querySelector('pubDate')?.textContent||'';
+    const source=item.querySelector('source')?.textContent||'';
+    if(title&&link) results.push({title,link,pubDate,source});
+  });
+  return results;
+}
+
+function timeAgo(dateStr){
+  const d=new Date(dateStr);if(isNaN(d))return'';
+  const mins=Math.floor((Date.now()-d)/60000);
+  if(mins<60)return mins+'m ago';
+  if(mins<1440)return Math.floor(mins/60)+'h ago';
+  return Math.floor(mins/1440)+'d ago';
+}
+
+function dedupeByTitle(articles){
+  const seen=new Set();return articles.filter(a=>{
+    const key=a.title.toLowerCase().slice(0,60);
+    if(seen.has(key))return false;seen.add(key);return true;
+  });
+}
+
+async function fetchNewsFeed(){
+  const feedEl=document.getElementById('news-feed');
+  const statusEl=document.getElementById('feed-status');
+  let allArticles=[];
+  let errors=0;
+  for(const feed of RSS_FEEDS){
+    try{
+      const resp=await fetch(CORS_PROXY+encodeURIComponent(feed.url));
+      if(!resp.ok)throw new Error(resp.status);
+      const xml=await resp.text();
+      const articles=parseRSS(xml);
+      allArticles=allArticles.concat(articles);
+    }catch(e){errors++;console.warn('Feed error:',feed.name,e)}
+  }
+  allArticles.sort((a,b)=>new Date(b.pubDate)-new Date(a.pubDate));
+  allArticles=dedupeByTitle(allArticles).slice(0,20);
+  
+  if(allArticles.length===0){
+    feedEl.innerHTML='<div class="feed-error">Unable to load live news feeds. Showing cached data above.</div>';
+    statusEl.textContent='Feed unavailable';return;
+  }
+  feedEl.innerHTML=allArticles.map(a=>`
+    <div class="news-item">
+      <div class="news-title"><a href="${a.link}" target="_blank" rel="noopener">${a.title}</a></div>
+      <div class="news-meta">
+        ${a.source?'<span class="news-source">'+a.source+'</span>':''}
+        <span>${timeAgo(a.pubDate)}</span>
+      </div>
+    </div>
+  `).join('');
+  statusEl.innerHTML='Last updated: '+new Date().toLocaleTimeString()+' <button class="refresh-btn" onclick="fetchNewsFeed()">↻ Refresh</button>';
+}
+
+// Stock quote via Yahoo Finance (client-side)
+async function fetchStockData(){
+  const tickers=[
+    {sym:'GCI',el:'gci'},{sym:'LEE',el:'lee'},{sym:'NYT',el:'nyt'},{sym:'NWSA',el:'nwsa'}
+  ];
+  const mktStatus=document.getElementById('market-status');
+  for(const t of tickers){
+    try{
+      const url=CORS_PROXY+encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/'+t.sym+'?interval=1d&range=2d');
+      const resp=await fetch(url);
+      const data=await resp.json();
+      const meta=data.chart.result[0].meta;
+      const price=meta.regularMarketPrice;
+      const prevClose=meta.chartPreviousClose||meta.previousClose;
+      const change=((price-prevClose)/prevClose*100).toFixed(2);
+      document.getElementById(t.el+'-price').textContent='$'+price.toFixed(2);
+      const deltaEl=document.getElementById(t.el+'-delta');
+      if(change>=0){deltaEl.className='kpi-delta up';deltaEl.textContent='▲ +'+change+'%';}
+      else{deltaEl.className='kpi-delta down';deltaEl.textContent='▼ '+change+'%';}
+    }catch(e){
+      document.getElementById(t.el+'-price').textContent='N/A';
+      console.warn('Stock error:',t.sym,e);
+    }
+  }
+  mktStatus.textContent='Updated: '+new Date().toLocaleTimeString();
+}
+
+// Initialize & auto-refresh
+fetchNewsFeed();
+fetchStockData();
+setInterval(fetchNewsFeed,600000); // 10 min
+setInterval(fetchStockData,600000);
 </script>
 </body>
 </html>
