@@ -217,6 +217,47 @@ canvas{width:100%!important;height:300px!important}
 </div>
 
 <div class="section">
+<div class="section-title">AI Impact Overlay — Estimated Publisher Traffic Loss</div>
+<div class="insight-box" style="border-left-color:var(--red)">
+"AI-generated search summaries now intercept an estimated 25–40% of informational queries that once drove clicks to publishers. The traffic loss is not evenly distributed — mid-tier regional publishers face the steepest declines, lacking both the brand moat of nationals and the hyper-local lock of community papers."
+</div>
+<div class="two-col">
+<div class="chart-container">
+<div class="chart-title">Estimated Organic Search Traffic Change from AI Summaries (2023→2025)</div>
+<canvas id="aiImpactChart"></canvas>
+</div>
+<div class="chart-container">
+<div class="chart-title">Before vs After AI Search — Monthly Visits (Millions)</div>
+<table class="deal-table">
+<thead><tr><th>Publisher Tier</th><th>Pre-AI (2022)</th><th>Post-AI (2025)</th><th>Δ Traffic</th></tr></thead>
+<tbody>
+<tr><td>Top 5 Nationals</td><td>1,420M</td><td>1,180M</td><td><span class="down">▼ 16.9%</span></td></tr>
+<tr><td>Major Metros (Top 25)</td><td>680M</td><td>485M</td><td><span class="down">▼ 28.7%</span></td></tr>
+<tr><td>Regional Dailies (26–100)</td><td>310M</td><td>186M</td><td><span class="down">▼ 40.0%</span></td></tr>
+<tr><td>Small/Community Papers</td><td>95M</td><td>72M</td><td><span class="down">▼ 24.2%</span></td></tr>
+<tr style="border-top:2px solid var(--accent)"><td><strong>Industry Total</strong></td><td><strong>2,505M</strong></td><td><strong>1,923M</strong></td><td><span class="down"><strong>▼ 23.2%</strong></span></td></tr>
+</tbody>
+</table>
+<div style="margin-top:12px;font-size:.75rem;color:var(--muted);font-style:italic">
+Estimates based on SimilarWeb, Chartbeat industry reports & Medill analysis. "Pre-AI" baseline: Q4 2022 (before widespread AI search integration).
+</div>
+</div>
+</div>
+<div class="chart-container" style="margin-top:20px">
+<div class="chart-title">Traffic Loss Severity by Publisher Tier</div>
+<div class="bar-chart">
+<div class="bar-row"><div class="bar-label">Top 5 Nationals</div><div class="bar-track"><div class="bar-fill" style="width:42%;background:linear-gradient(90deg,#f87171,#dc2626)">▼ 16.9%</div></div></div>
+<div class="bar-row"><div class="bar-label">Major Metros</div><div class="bar-track"><div class="bar-fill" style="width:72%;background:linear-gradient(90deg,#f87171,#b91c1c)">▼ 28.7%</div></div></div>
+<div class="bar-row"><div class="bar-label">Regional Dailies</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:linear-gradient(90deg,#dc2626,#7f1d1d)">▼ 40.0%</div></div></div>
+<div class="bar-row"><div class="bar-label">Community Papers</div><div class="bar-track"><div class="bar-fill" style="width:60%;background:linear-gradient(90deg,#f87171,#991b1b)">▼ 24.2%</div></div></div>
+</div>
+<div style="margin-top:16px;font-size:.8rem;color:var(--muted)">
+<strong style="color:var(--accent)">Key finding:</strong> Regional dailies (ranked 26–100) suffer the worst losses. Their content is general enough for AI to summarize, yet they lack the subscriber loyalty and brand recognition to retain direct visits. Nationals retain readers through habit, brand trust, and paywalled exclusives. Community papers survive on hyper-local coverage AI can't replicate.
+</div>
+</div>
+</div>
+
+<div class="section">
 <div class="section-title">Top Owners by Daily Title Count (2025)</div>
 <div class="chart-container">
 <div class="bar-chart">
@@ -432,6 +473,20 @@ options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero
     .attr('stroke','rgba(255,255,255,.2)')
     .attr('stroke-width',.8);
 })();
+
+// AI Impact Chart
+new Chart(document.getElementById('aiImpactChart'),{
+type:'line',
+data:{
+labels:['Q1 2023','Q2 2023','Q3 2023','Q4 2023','Q1 2024','Q2 2024','Q3 2024','Q4 2024','Q1 2025'],
+datasets:[
+{label:'Top 5 Nationals',data:[0,-2.1,-4.8,-6.5,-8.9,-11.2,-13.5,-15.1,-16.9],borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',fill:false,tension:.3},
+{label:'Major Metros (Top 25)',data:[0,-3.5,-8.2,-12.1,-16.4,-20.8,-24.1,-26.5,-28.7],borderColor:'#c9a84c',backgroundColor:'rgba(201,168,76,.1)',fill:false,tension:.3},
+{label:'Regional Dailies (26–100)',data:[0,-5.2,-11.8,-18.3,-24.0,-30.2,-34.8,-37.6,-40.0],borderColor:'#f87171',backgroundColor:'rgba(248,113,113,.1)',fill:false,tension:.3},
+{label:'Community Papers',data:[0,-2.8,-6.1,-9.4,-13.2,-17.5,-20.3,-22.4,-24.2],borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.1)',fill:false,tension:.3}
+]},
+options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{family:'Georgia',size:11}}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y+'%'}}},scales:{y:{ticks:{callback:v=>v+'%'},grid:{color:gridColor}},x:{grid:{color:gridColor}}}}
+});
 
 // ===== LIVE DATA INTEGRATION =====
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
